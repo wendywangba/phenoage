@@ -10,6 +10,7 @@
 - **认得中国报告**：支持“白细胞计数 / WBC”“肌酐（CREA）”“△*碱性磷酸酶”这类写法、名称换行、不同的列顺序，也认得美国报告的英文写法。
 - **单位正确**：g/L 和 g/dL、µmol/L 和 mg/dL、mmol/L 和 mg/dL 都能用。识别到的单位和数值对不上时会提醒。
 - **能核对**：识别结果先填进表格，确认或修改之后再计算。不想传截图也可以直接手填。
+- **缺 1–2 项也能估算**：缺的指标按典型健康成年人的值代入，并给出假设它落在正常参考范围内时结果的区间。
 - **能分享**：生成一张结果图，长按保存。
 
 ## 需要的 9 项指标
@@ -26,7 +27,7 @@
 | 碱性磷酸酶 | ALP | U/L |
 | 白细胞计数 | WBC | 10⁹/L |
 
-很多常规体检不含 C 反应蛋白，没有这一项就算不出 PhenoAge。
+很多常规体检不含 C 反应蛋白。缺了它也能估算，区间大约 ±1.7 岁；缺红细胞分布宽度时区间最宽（约 ±6 岁）。
 
 ## 公式
 
@@ -67,6 +68,6 @@ npm run build    # 输出到 dist/
 
 ## English
 
-Upload screenshots of a blood test report. The page reads the 9 markers with in-browser OCR, lets you check them, and computes PhenoAge (Levine 2018). Nothing is uploaded. It handles Chinese and US report formats and units (g/L vs g/dL, µmol/L vs mg/dL, mmol/L vs mg/dL).
+Upload screenshots of a blood test report. The page reads the 9 markers with in-browser OCR, lets you check them, and computes PhenoAge (Levine 2018). Nothing is uploaded. It handles Chinese and US report formats and units (g/L vs g/dL, µmol/L vs mg/dL, mmol/L vs mg/dL). With 1–2 markers missing it gives an estimate and a range, assuming the missing values are in their normal ranges.
 
 Live: <https://wendywangba.github.io/phenoage/>. For curiosity only, not medical advice.

@@ -94,3 +94,38 @@ export function contributions(x: PhenoInputs): Record<MarkerId, number> {
   }
   return out;
 }
+
+/** At most this many markers can be missing for an estimate. */
+export const MAX_MISSING = 2;
+
+export interface Estimate extends PhenoResult {
+  /** Lowest and highest PhenoAge if each missing marker lies anywhere in its normal range. */
+  low: number;
+  high: number;
+  missing: MarkerId[];
+  /** Inputs with missing markers set to their typical value. */
+  filled: PhenoInputs;
+}
+
+/**
+ * PhenoAge when some markers are missing: the central value uses a typical
+ * healthy adult value for each gap, and the range assumes the true value is
+ * somewhere in the normal range. With nothing missing this equals phenoAge().
+ */
+export function estimatePhenoAge(age: number, values: Partial<Record<MarkerId, number>>): Estimate {
+  const missing = MARKER_IDS.filter((id) => values[id] === undefined);
+  const filled = { age } as PhenoInputs;
+  for (const id of MARKER_IDS) filled[id] = values[id] ?? MARKERS[id].typical;
+  const r = phenoAge(filled);
+  // PhenoAge is linear in each marker's term and each term is monotonic,
+  // so the extremes sit at the ends of the normal ranges.
+  let down = 0;
+  let up = 0;
+  for (const id of missing) {
+    const mid = markerTerm(id, MARKERS[id].typical);
+    const [lo, hi] = MARKERS[id].normal.map((v) => markerTerm(id, v) - mid);
+    down += Math.min(lo, hi) / 0.090165;
+    up += Math.max(lo, hi) / 0.090165;
+  }
+  return { ...r, low: r.phenoAge + down, high: r.phenoAge + up, missing, filled };
+}

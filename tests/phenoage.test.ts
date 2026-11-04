@@ -96,3 +96,44 @@ test("linear predictor uses ln(CRP in mg/dL)", () => {
   const b = linearPredictor({ ...person, crp: 1 });
   assert.ok(Math.abs(a - b - 0.0954 * Math.log(10)) < 1e-12);
 });
+
+test("estimate with nothing missing is the exact result", async () => {
+  const { estimatePhenoAge } = await import("../src/core/phenoage.ts");
+  const { age, ...values } = person;
+  const e = estimatePhenoAge(age, values);
+  assert.equal(e.phenoAge, phenoAge(person).phenoAge);
+  assert.equal(e.low, e.phenoAge);
+  assert.equal(e.high, e.phenoAge);
+  assert.deepEqual(e.missing, []);
+});
+
+test("missing CRP: typical value in the middle, normal range at the ends", async () => {
+  const { estimatePhenoAge } = await import("../src/core/phenoage.ts");
+  const { age, crp: _crp, ...values } = person;
+  const e = estimatePhenoAge(age, values);
+  const at = (crp: number) => phenoAge({ ...person, crp }).phenoAge;
+  assert.deepEqual(e.missing, ["crp"]);
+  assert.ok(Math.abs(e.phenoAge - at(MARKERS.crp.typical)) < 1e-9);
+  assert.ok(Math.abs(e.low - at(MARKERS.crp.normal[0])) < 1e-9);
+  assert.ok(Math.abs(e.high - at(MARKERS.crp.normal[1])) < 1e-9);
+  assert.ok(e.high - e.low < 4, "CRP alone should give a narrow range");
+});
+
+test("missing albumin: a higher value means a younger result, so the range flips", async () => {
+  const { estimatePhenoAge } = await import("../src/core/phenoage.ts");
+  const { age, albumin: _a, ...values } = person;
+  const e = estimatePhenoAge(age, values);
+  assert.ok(Math.abs(e.low - phenoAge({ ...person, albumin: MARKERS.albumin.normal[1] }).phenoAge) < 1e-9);
+  assert.ok(Math.abs(e.high - phenoAge({ ...person, albumin: MARKERS.albumin.normal[0] }).phenoAge) < 1e-9);
+});
+
+test("two missing markers: the ranges add up", async () => {
+  const { estimatePhenoAge } = await import("../src/core/phenoage.ts");
+  const { age, crp: _c, wbc: _w, ...values } = person;
+  const both = estimatePhenoAge(age, values);
+  const onlyCrp = estimatePhenoAge(age, { ...values, wbc: MARKERS.wbc.typical });
+  const onlyWbc = estimatePhenoAge(age, { ...values, crp: MARKERS.crp.typical });
+  const span = (e: { low: number; high: number }) => e.high - e.low;
+  assert.ok(Math.abs(span(both) - span(onlyCrp) - span(onlyWbc)) < 1e-9);
+  assert.ok(both.low <= both.phenoAge && both.phenoAge <= both.high);
+});

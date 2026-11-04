@@ -561,6 +561,32 @@ select {
   color: var(--ink2);
 }
 
+.big .num .approx {
+  font-size: 28px;
+  margin: 0 6px 0 0;
+  vertical-align: 0.6em;
+}
+
+.big .range {
+  color: var(--warn);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.estimate-note {
+  margin: 14px 0 0;
+}
+
+.contrib .missing-marker .c-name,
+.contrib .missing-marker .c-val {
+  color: var(--ink3);
+}
+
+.contrib .missing-marker .c-val {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .big .diff {
   display: inline-block;
   margin-top: 10px;

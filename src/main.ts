@@ -2,7 +2,7 @@ import "./style.css";
 import { MARKER_IDS, MARKERS, toHalfWidth, type MarkerId } from "./core/markers.ts";
 import { combine, findAge, parseReport, type Finding, type NoteKind, type ParseResult } from "./core/parse.ts";
 import { chooseUnit, isPlausible, toBase } from "./core/units.ts";
-import { contributions, phenoAge, type PhenoInputs, type PhenoResult } from "./core/phenoage.ts";
+import { contributions, estimatePhenoAge, MAX_MISSING } from "./core/phenoage.ts";
 import { initOcr, recognizeFile } from "./ocr/client.ts";
 import { ABBR, fmt, initialLang, saveLang, strings, type Lang } from "./i18n.ts";
 import { drawCard } from "./share.ts";
@@ -258,18 +258,31 @@ function ageValue(): number | null {
   return n && !n.qualifier && n.value >= 18 && n.value <= 110 ? n.value : null;
 }
 
-function collect(): { inputs?: PhenoInputs; missing: MarkerId[]; bad: MarkerId[] } {
+interface Collected {
+  age: number | null;
+  values: Partial<Record<MarkerId, number>>;
+  missing: MarkerId[];
+  bad: MarkerId[];
+  /** Enough to show a result (exact, or an estimate with a few markers missing). */
+  ok: boolean;
+}
+
+function collect(): Collected {
   const missing: MarkerId[] = [];
   const bad: MarkerId[] = [];
-  const inputs = { age: ageValue() ?? NaN } as PhenoInputs;
+  const values: Partial<Record<MarkerId, number>> = {};
   for (const id of MARKER_IDS) {
     const a = assess(id);
     if (a.level === "empty") missing.push(id);
     else if (a.level === "error" || a.base === undefined) bad.push(id);
-    else inputs[id] = a.base;
+    else values[id] = a.base;
   }
-  if (missing.length || bad.length || !Number.isFinite(inputs.age)) return { missing, bad };
-  return { inputs, missing, bad };
+  const age = ageValue();
+  return { age, values, missing, bad, ok: age !== null && !bad.length && missing.length <= MAX_MISSING };
+}
+
+function joinList(items: string[]): string {
+  return items.join(state.lang === "zh" ? "、" : ", ");
 }
 
 // -------------------------------------------------------------- render
@@ -566,14 +579,18 @@ function updateMissing() {
   const btn = document.getElementById("calc") as HTMLButtonElement | null;
   if (!el || !btn) return;
   const c = collect();
-  const names = [...(ageValue() ? [] : [s.age]), ...[...c.missing, ...c.bad].map((id) => s.markers[id])];
-  el.textContent = names.length ? fmt(s.missingList, { list: names.join(state.lang === "zh" ? "、" : ", ") }) : "";
-  btn.disabled = !c.inputs;
+  const names = [...(c.age !== null ? [] : [s.age]), ...[...c.missing, ...c.bad].map((id) => s.markers[id])];
+  let text = names.length ? fmt(s.missingList, { list: joinList(names) }) : "";
+  const sep = state.lang === "zh" ? "" : " ";
+  if (c.missing.length > MAX_MISSING) text += sep + s.tooMany;
+  else if (c.missing.length > 0) text += sep + s.canEstimate;
+  el.textContent = text;
+  btn.disabled = !c.ok;
+  btn.textContent = c.ok && c.missing.length ? fmt(s.calculateEstimate, { n: c.missing.length }) : s.calculate;
 }
 
 function calculate() {
-  const c = collect();
-  if (!c.inputs) return;
+  if (!collect().ok) return;
   state.showResult = true;
   renderResult();
   document.getElementById("result")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -585,30 +602,41 @@ function renderResult() {
   const el = document.getElementById("result");
   if (!el) return;
   const c = collect();
-  if (!state.showResult || !c.inputs) {
+  if (!state.showResult || !c.ok || c.age === null) {
     el.hidden = true;
     return;
   }
   el.hidden = false;
   const s = S();
-  const r: PhenoResult = phenoAge(c.inputs);
-  const contrib = contributions(c.inputs);
+  const r = estimatePhenoAge(c.age, c.values);
+  const isEstimate = r.missing.length > 0;
+  const contrib = contributions(r.filled);
   const d = r.difference;
+  const missingNames = joinList(r.missing.map((id) => s.markers[id]));
+  const lo = fmtNum(r.low);
+  const hi = fmtNum(r.high);
   const diffText =
     Math.abs(d) < 0.5 ? s.same : d < 0 ? fmt(s.younger, { d: fmtNum(-d) }) : fmt(s.older, { d: fmtNum(d) });
-  const sorted = [...MARKER_IDS].sort((a, b) => Math.abs(contrib[b]) - Math.abs(contrib[a]));
+  const sorted = [
+    ...MARKER_IDS.filter((id) => !r.missing.includes(id)).sort((a, b) => Math.abs(contrib[b]) - Math.abs(contrib[a])),
+    ...r.missing,
+  ];
   const max = Math.max(1, ...sorted.map((id) => Math.abs(contrib[id])));
 
   const canvas = drawCard({
     title: s.cardTitle,
     phenoAge: r.phenoAge,
     yearsWord: s.years,
-    ageLine: fmt(s.chrono, { age: cleanNumber(c.inputs.age) }),
+    ageLine: fmt(s.chrono, { age: cleanNumber(c.age) }),
     diffLine:
       Math.abs(d) < 0.5 ? s.cardSame : d < 0 ? fmt(s.cardYounger, { d: fmtNum(-d) }) : fmt(s.cardOlder, { d: fmtNum(d) }),
     younger: d < 0,
-    highlights: sorted.slice(0, 3).map((id) => ({ label: s.short[id], years: contrib[id] })),
-    footer: s.cardFooter,
+    highlights: sorted
+      .filter((id) => !r.missing.includes(id))
+      .slice(0, 3)
+      .map((id) => ({ label: s.short[id], years: contrib[id] })),
+    estimate: isEstimate ? fmt(s.cardEstimate, { list: joinList(r.missing.map((id) => s.short[id])), lo, hi }) : undefined,
+    footer: fmt(s.cardFooter, { n: MARKER_IDS.length - r.missing.length }),
     url: location.host ? `${location.host}${import.meta.env.BASE_URL}`.replace(/\/$/, "") : "",
   });
   const dataUrl = canvas.toDataURL("image/png");
@@ -622,11 +650,19 @@ function renderResult() {
     h(
       "div",
       { class: "big" },
-      h("p", { class: "label" }, s.yourPheno),
-      h("p", { class: "num" }, fmtNum(r.phenoAge), h("small", {}, s.years)),
-      h("p", { class: "chrono" }, fmt(s.chrono, { age: cleanNumber(c.inputs.age) })),
+      h("p", { class: "label" }, isEstimate ? s.estimatedPheno : s.yourPheno),
+      h(
+        "p",
+        { class: "num" },
+        isEstimate && h("small", { class: "approx" }, s.approx),
+        fmtNum(r.phenoAge),
+        h("small", {}, s.years),
+      ),
+      isEstimate && h("p", { class: "range" }, fmt(s.rangeLine, { lo, hi })),
+      h("p", { class: "chrono" }, fmt(s.chrono, { age: cleanNumber(c.age) })),
       h("p", { class: `diff ${d < 0 ? "good" : d > 0.5 ? "bad" : ""}` }, diffText),
     ),
+    isEstimate && h("p", { class: "note estimate-note" }, fmt(s.estimateNote, { list: missingNames })),
     h("h3", {}, s.contribTitle),
     h("p", { class: "hint" }, s.contribHint),
     h(
@@ -635,6 +671,15 @@ function renderResult() {
       sorted.map((id) => {
         const v = contrib[id];
         const w = (Math.abs(v) / max) * 50;
+        if (r.missing.includes(id)) {
+          return h(
+            "li",
+            { class: "missing-marker" },
+            h("span", { class: "c-name" }, s.short[id]),
+            h("span", { class: "c-bar" }),
+            h("span", { class: "c-val" }, s.notProvided),
+          );
+        }
         return h(
           "li",
           {},

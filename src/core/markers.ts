@@ -42,8 +42,10 @@ export interface MarkerDef {
   codes: string[];
   /** Names that need the unit or value to tell which measurement it is. */
   ambiguous?: string[];
-  /** Typical healthy adult value, only used to explain which markers push the result up or down. */
+  /** Typical healthy adult value (base unit). Used for the breakdown and to fill a missing marker. */
   typical: number;
+  /** Usual reference range (base unit). Bounds the estimate when the marker is missing. */
+  normal: [number, number];
 }
 
 export const MARKERS: Record<MarkerId, MarkerDef> = {
@@ -56,6 +58,7 @@ export const MARKERS: Record<MarkerId, MarkerDef> = {
     names: ["白蛋白", "血清白蛋白", "清蛋白", "ALBUMIN", "白蛋白测定"],
     codes: ["ALB", "ALBUMIN"],
     typical: 45,
+    normal: [40, 55],
   },
   creatinine: {
     id: "creatinine",
@@ -66,6 +69,7 @@ export const MARKERS: Record<MarkerId, MarkerDef> = {
     names: ["肌酐", "血肌酐", "血清肌酐", "肌酐测定", "CREATININE", "CREATININESERUM"],
     codes: ["CREA", "CRE", "CR", "SCR", "CREAT"],
     typical: 70,
+    normal: [45, 100],
   },
   glucose: {
     id: "glucose",
@@ -87,6 +91,7 @@ export const MARKERS: Record<MarkerId, MarkerDef> = {
     ],
     codes: ["GLU", "GLUC", "FPG", "FBG"],
     typical: 5.0,
+    normal: [3.9, 6.1],
   },
   crp: {
     id: "crp",
@@ -108,6 +113,7 @@ export const MARKERS: Record<MarkerId, MarkerDef> = {
     ],
     codes: ["CRP", "HSCRP", "HCRP", "CRPHS"],
     typical: 1.0,
+    normal: [0.2, 5],
   },
   lymph: {
     id: "lymph",
@@ -128,6 +134,7 @@ export const MARKERS: Record<MarkerId, MarkerDef> = {
     codes: ["LYM%", "LY%", "LYMPH%", "LYMP%"],
     ambiguous: ["淋巴细胞", "LYMPHOCYTES", "LYMPHS", "LYM", "LYMPH"],
     typical: 30,
+    normal: [20, 50],
   },
   mcv: {
     id: "mcv",
@@ -135,6 +142,7 @@ export const MARKERS: Record<MarkerId, MarkerDef> = {
     names: ["平均红细胞体积", "红细胞平均体积", "MEANCORPUSCULARVOLUME", "MEANCELLVOLUME"],
     codes: ["MCV"],
     typical: 90,
+    normal: [82, 100],
   },
   rdw: {
     id: "rdw",
@@ -151,6 +159,7 @@ export const MARKERS: Record<MarkerId, MarkerDef> = {
     ],
     codes: ["RDW", "RDWCV"],
     typical: 13.0,
+    normal: [11, 14.5],
   },
   alp: {
     id: "alp",
@@ -161,6 +170,7 @@ export const MARKERS: Record<MarkerId, MarkerDef> = {
     names: ["碱性磷酸酶", "碱性磷酸酶测定", "ALKALINEPHOSPHATASE"],
     codes: ["ALP", "AKP", "ALKP"],
     typical: 70,
+    normal: [40, 120],
   },
   wbc: {
     id: "wbc",
@@ -180,6 +190,7 @@ export const MARKERS: Record<MarkerId, MarkerDef> = {
     ],
     codes: ["WBC"],
     typical: 6.0,
+    normal: [3.5, 9.5],
   },
 };
 

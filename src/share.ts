@@ -7,6 +7,8 @@ export interface CardData {
   diffLine: string;
   younger: boolean;
   highlights: { label: string; years: number }[];
+  /** Shown under the pill when some markers were missing. */
+  estimate?: string;
   footer: string;
   url: string;
   yearsWord: string;
@@ -79,8 +81,20 @@ export function drawCard(d: CardData): HTMLCanvasElement {
   g.fillStyle = "#fff";
   g.fillText(d.diffLine, 130, 696 + size * 0.35);
 
-  // highlights
   let y = 860;
+  if (d.estimate) {
+    let es = 34;
+    g.font = `500 ${es}px ${FONT}`;
+    while (g.measureText(d.estimate).width > W - 180 && es > 22) {
+      es -= 2;
+      g.font = `500 ${es}px ${FONT}`;
+    }
+    g.fillStyle = "#9a6200";
+    g.fillText(d.estimate, 92, 812);
+    y = 920;
+  }
+
+  // highlights
   g.font = `500 40px ${FONT}`;
   const max = Math.max(1, ...d.highlights.map((h) => Math.abs(h.years)));
   for (const h of d.highlights) {
