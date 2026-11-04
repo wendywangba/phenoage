@@ -1,0 +1,7 @@
+node_modules/
+dist/
+public/ocr/
+# Real lab reports have personal health data. Never commit them.
+samples/
+*.local
+.DS_Store
