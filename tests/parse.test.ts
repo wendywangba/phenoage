@@ -187,3 +187,27 @@ test("reads the age from a report header", async () => {
   assert.equal(findAge(table([[[20, "Age: 45"]]])), 45);
   assert.equal(findAge(table([[[20, "白细胞计数"], [300, "6.1"]]])), undefined);
 });
+
+test("urine and stool sections are skipped in a full report", () => {
+  const boxes = table([
+    [[20, "尿常规"]],
+    [[20, "项目名称"], [300, "结果"], [450, "单位"]],
+    [[20, "白细胞"], [300, "15.3"], [450, "/μL"]],
+    [[20, "葡萄糖"], [300, "阴性(-)"]],
+    [[20, "血常规"]],
+    [[20, "白细胞计数(WBC)"], [300, "5.84"], [450, "10^9/L"]],
+    [[20, "生化"]],
+    [[20, "葡萄糖"], [300, "5.12"], [450, "mmol/L"]],
+    [[20, "粪便常规"]],
+    [[20, "白细胞"], [300, "2"], [450, "/HP"]],
+  ]);
+  assert.deepEqual(values(boxes), { wbc: 5.84, glucose: 5.12 });
+});
+
+test("a value that only makes sense for urine loses to a plausible blood value", () => {
+  // no section titles this time, so only the unit check can tell them apart
+  const a = parseReport(table([[[20, "白细胞"], [300, "15.3"], [450, "/μL"]]]), 0);
+  const b = parseReport(table([[[20, "白细胞计数"], [300, "5.84"], [450, "10^9/L"]]]), 1);
+  const c = combine([a, b]);
+  assert.equal(c.values.wbc?.value, 5.84);
+});

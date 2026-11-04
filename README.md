@@ -1,12 +1,13 @@
 # PhenoAge 表型年龄计算
 
-上传体检报告截图，在浏览器里识别 9 项常规血液指标，估算表型年龄（PhenoAge）。
+上传体检报告（整份 PDF 或截图），在浏览器里找出 9 项常规血液指标，估算表型年龄（PhenoAge）。
 
 **在线使用：<https://wendywangba.github.io/phenoage/>**
 
 [English below](#english)
 
-- **不上传**：文字识别（PaddleOCR）和计算都在浏览器里完成，截图不会离开你的设备。
+- **不上传**：PDF 读取、文字识别（PaddleOCR）和计算都在浏览器里完成，报告不会离开你的设备。
+- **整份 PDF 也行**：App 导出的电子版 PDF 直接读文字层，20 页一两秒，不用下载识别模型；扫描版 PDF 逐页识别，9 项找齐就停。会跳过尿常规、粪便等章节，避免把尿里的“白细胞”“葡萄糖”当成血液指标。
 - **认得中国报告**：支持“白细胞计数 / WBC”“肌酐（CREA）”“△*碱性磷酸酶”这类写法、名称换行、不同的列顺序，也认得美国报告的英文写法。
 - **单位正确**：g/L 和 g/dL、µmol/L 和 mg/dL、mmol/L 和 mg/dL 都能用。识别到的单位和数值对不上时会提醒。
 - **能核对**：识别结果先填进表格，确认或修改之后再计算。不想传截图也可以直接手填。
@@ -52,12 +53,15 @@ npm test         # 公式、单位、报告解析的测试
 npm run build    # 输出到 dist/
 ```
 
-`npm run ocr:samples -- <文件夹>` 可以在 Node 里对一批截图跑识别，方便调试。真实体检报告含个人信息，请放在仓库外面（`samples/` 已被忽略）。
+`npm run ocr:samples -- <文件夹>` 可以在 Node 里对一批截图跑识别，方便调试。
+`node scripts/fake-report.mjs <输出文件夹>` 会生成几份 20 页的假体检报告 PDF（电子版、扫描版、缺 CRP 版），内容全是编的，用来测试 PDF 导入（需要 Playwright）。
+真实体检报告含个人信息，请放在仓库外面（`samples/` 已被忽略）。
 
 ## 用到的开源项目
 
 - [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) 的 PP-OCRv4 中文模型（Apache-2.0），通过 [@gutenye/ocr-models](https://www.npmjs.com/package/@gutenye/ocr-models) 获取
 - [ONNX Runtime Web](https://onnxruntime.ai/)（MIT）
+- [PDF.js](https://mozilla.github.io/pdf.js/)（Apache-2.0）
 - [Vite](https://vite.dev/)
 
 ## 免责声明
@@ -68,6 +72,6 @@ npm run build    # 输出到 dist/
 
 ## English
 
-Upload screenshots of a blood test report. The page reads the 9 markers with in-browser OCR, lets you check them, and computes PhenoAge (Levine 2018). Nothing is uploaded. It handles Chinese and US report formats and units (g/L vs g/dL, µmol/L vs mg/dL, mmol/L vs mg/dL). With 1–2 markers missing it gives an estimate and a range, assuming the missing values are in their normal ranges.
+Upload a checkup report (the whole PDF, or screenshots). The page finds the 9 markers in the browser (PDF text layer, or OCR for screenshots and scans), lets you check them, and computes PhenoAge (Levine 2018). Nothing is uploaded. It handles Chinese and US report formats and units (g/L vs g/dL, µmol/L vs mg/dL, mmol/L vs mg/dL). With 1–2 markers missing it gives an estimate and a range, assuming the missing values are in their normal ranges.
 
 Live: <https://wendywangba.github.io/phenoage/>. For curiosity only, not medical advice.

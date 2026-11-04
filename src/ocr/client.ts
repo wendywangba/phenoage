@@ -1,5 +1,5 @@
 // Main-thread side of OCR: decodes images and talks to the worker.
-import type { TextBox } from "./pipeline.ts";
+import type { OcrOptions, TextBox } from "./pipeline.ts";
 import type { WorkerRequest, WorkerResponse } from "./worker.ts";
 
 const MAX_WIDTH = 1600;
@@ -36,9 +36,14 @@ function getWorker(): Worker {
   return worker;
 }
 
-/** Start downloading the models. Safe to call more than once. */
-export function initOcr(h: OcrHooks = {}): Promise<void> {
+/** Register callbacks (download progress) without starting the download. */
+export function setOcrHooks(h: OcrHooks) {
   hooks = h;
+}
+
+/** Start downloading the models. Safe to call more than once. */
+export function initOcr(h?: OcrHooks): Promise<void> {
+  if (h) hooks = h;
   if (ready) return ready;
   const w = getWorker();
   ready = new Promise<void>((resolve, reject) => {
@@ -49,7 +54,7 @@ export function initOcr(h: OcrHooks = {}): Promise<void> {
       } else if (e.data.type === "error" && e.data.id === undefined) {
         w.removeEventListener("message", onMsg);
         ready = null;
-        reject(new Error(e.data.message));
+        reject(Object.assign(new Error(e.data.message), { download: true }));
       }
     };
     w.addEventListener("message", onMsg);
@@ -59,13 +64,21 @@ export function initOcr(h: OcrHooks = {}): Promise<void> {
 }
 
 export async function recognizeFile(file: Blob, onProgress?: (done: number, total: number) => void): Promise<TextBox[]> {
-  await initOcr(hooks);
-  const img = await decodeImage(file);
+  return recognizeImage(await decodeImage(file), onProgress);
+}
+
+/** OCR an already-decoded RGBA image (e.g. a rendered PDF page). The buffer is transferred. */
+export async function recognizeImage(
+  img: { width: number; height: number; data: Uint8ClampedArray<ArrayBuffer> },
+  onProgress?: (done: number, total: number) => void,
+  opts?: OcrOptions,
+): Promise<TextBox[]> {
+  await initOcr();
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject, onProgress });
     getWorker().postMessage(
-      { type: "ocr", id, width: img.width, height: img.height, buffer: img.data.buffer } satisfies WorkerRequest,
+      { type: "ocr", id, width: img.width, height: img.height, buffer: img.data.buffer, opts } satisfies WorkerRequest,
       [img.data.buffer],
     );
   });

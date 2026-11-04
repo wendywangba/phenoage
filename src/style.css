@@ -319,6 +319,20 @@ select:focus-visible,
   flex-shrink: 0;
 }
 
+.pdf-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--bad);
+}
+
 .thumb-meta {
   display: flex;
   flex-direction: column;

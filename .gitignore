@@ -1,6 +1,7 @@
 node_modules/
 dist/
 public/ocr/
+public/pdfjs/
 # Real lab reports have personal health data. Never commit them.
 samples/
 *.local

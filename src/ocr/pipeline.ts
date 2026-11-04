@@ -223,8 +223,8 @@ function iou(a: Box, b: Box): number {
   return ua > 0 ? inter / ua : 0;
 }
 
-export async function detect(img: RGBAImage, run: RunModel): Promise<Box[]> {
-  const s = detScale(img.width);
+export async function detect(img: RGBAImage, run: RunModel, width?: number): Promise<Box[]> {
+  const s = width ? Math.min(1, width / img.width) : detScale(img.width);
   const w = Math.max(32, Math.round((img.width * s) / 32) * 32);
   const fullH = Math.max(32, Math.round((img.height * s) / 32) * 32);
   const scaled = resizeRGBA(img, w, fullH);
@@ -358,9 +358,20 @@ export async function recognize(
   return results;
 }
 
-export async function ocr(img: RGBAImage, models: OcrModels, onProgress?: Progress): Promise<TextBox[]> {
+export interface OcrOptions {
+  /**
+   * Skip text lines wider than this share of the image. Full report pages are
+   * mostly paragraphs; lab table cells are short, so this saves a lot of time.
+   */
+  maxLineWidth?: number;
+  /** Run text detection at this image width (recognition still uses full resolution). */
+  detWidth?: number;
+}
+
+export async function ocr(img: RGBAImage, models: OcrModels, onProgress?: Progress, opts: OcrOptions = {}): Promise<TextBox[]> {
   const flat = flattenAlpha(img);
-  const boxes = await detect(flat, models.det);
+  let boxes = await detect(flat, models.det, opts.detWidth);
+  if (opts.maxLineWidth) boxes = boxes.filter((b) => b.x1 - b.x0 <= opts.maxLineWidth! * img.width);
   const texts = await recognize(flat, boxes, models, onProgress);
   return texts.filter((t) => t.text.length > 0);
 }

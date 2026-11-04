@@ -11,6 +11,7 @@ import {
   unitId,
   type MarkerId,
 } from "./markers.ts";
+import { chooseUnit } from "./units.ts";
 
 export interface OcrText {
   text: string;
@@ -159,11 +160,38 @@ function headerAbove(items: Item[], re: RegExp, y: number, H: number): Item | un
   return best;
 }
 
+// Sections of a full report. Urine and stool tests reuse names such as
+// 白细胞 and 葡萄糖, so their sections are skipped.
+const SKIP_SECTION =
+  /^(尿常规|尿液常规|尿液分析|尿液检查|尿沉渣|尿液沉渣|尿干化学|尿十一项|尿十项|尿液干化学|粪便常规|粪常规|大便常规|便常规|粪便检查|粪便隐血|白带常规|阴道分泌物|URINALYSIS|URINE|STOOL)/;
+const OTHER_SECTION =
+  /^(血常规|血液常规|血细胞分析|全血细胞|血细胞|生化|肝功能|肾功能|肝功|肾功|血脂|血糖|空腹血糖|糖代谢|电解质|心肌酶|甲状腺|甲功|肿瘤标志物|免疫|炎症|C反应蛋白|超敏C反应蛋白|凝血|乙肝|血型|一般检查|内科|外科|眼科|耳鼻喉|口腔|妇科|心电图|彩超|超声|B超|胸部|胸片|DR|CT|骨密度|总检|结论|建议|健康建议|CBC|CHEMISTRY|COMPLETEBLOODCOUNT|COMPREHENSIVEMETABOLICPANEL|METABOLICPANEL|LIPIDPANEL|HEMATOLOGY)/;
+
+/** Vertical ranges that belong to urine/stool sections. */
+function skipZones(items: Item[]): [number, number][] {
+  const zones: [number, number][] = [];
+  let start: number | null = null;
+  for (const it of items) {
+    const n = normName(it.t).replace(/\(.*$/, "");
+    if (n.length > 14 || /\d/.test(n)) continue;
+    if (SKIP_SECTION.test(n)) {
+      if (start === null) start = it.y0;
+    } else if (OTHER_SECTION.test(n) && start !== null) {
+      zones.push([start, it.y0]);
+      start = null;
+    }
+  }
+  if (start !== null) zones.push([start, Infinity]);
+  return zones;
+}
+
 export function parseReport(boxes: OcrText[], image?: number): ParseResult {
   const items = prepare(boxes);
   const H = median(items.map((i) => i.h)) || 20;
   const out: ParseResult = { findings: [], rdwSd: [], lymphAbs: [] };
   const used = new Set<Item>();
+  const zones = skipZones(items);
+  const skipped = (y: number) => zones.some(([a, b]) => y >= a && y < b);
 
   for (const it of items) {
     if (used.has(it)) continue;
@@ -207,6 +235,7 @@ export function parseReport(boxes: OcrText[], image?: number): ParseResult {
     }
     if (!match) continue;
     used.add(it);
+    if (skipped(it.cy)) continue;
 
     // 2. Find the result and unit on the same row.
     const cy = (span.y0 + span.y1) / 2;
@@ -288,11 +317,20 @@ export function combine(results: ParseResult[]): Combined {
   const values: Partial<Record<MarkerId, Finding>> = {};
   const alternatives: Partial<Record<MarkerId, Finding[]>> = {};
   const notes: NoteKind[] = [];
+  // 2: value fits the unit on the report; 1: only fits another unit; 0: fits nothing
+  const quality = (f: Finding) => {
+    const c = chooseUnit(f.id, f.value, f.unit);
+    return c.implausible ? 0 : c.conflict ? 1 : 2;
+  };
   for (const r of results) {
     for (const f of r.findings) {
       const cur = values[f.id];
       if (!cur) values[f.id] = f;
-      else if (cur.value !== f.value) (alternatives[f.id] ??= []).push(f);
+      else if (quality(f) > quality(cur)) {
+        // e.g. a urine count that slipped through: prefer a value that makes sense for blood
+        values[f.id] = f;
+        if (cur.value !== f.value) (alternatives[f.id] ??= []).push(cur);
+      } else if (cur.value !== f.value) (alternatives[f.id] ??= []).push(f);
     }
   }
   if (!values.rdw && results.some((r) => r.rdwSd.length)) notes.push("rdwSdOnly");

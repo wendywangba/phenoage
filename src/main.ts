@@ -1,9 +1,18 @@
 import "./style.css";
 import { MARKER_IDS, MARKERS, toHalfWidth, type MarkerId } from "./core/markers.ts";
-import { combine, findAge, parseReport, type Finding, type NoteKind, type ParseResult } from "./core/parse.ts";
+import {
+  combine,
+  findAge,
+  parseReport,
+  type Finding,
+  type NoteKind,
+  type OcrText,
+  type ParseResult,
+} from "./core/parse.ts";
 import { chooseUnit, isPlausible, toBase } from "./core/units.ts";
 import { contributions, estimatePhenoAge, MAX_MISSING } from "./core/phenoage.ts";
-import { initOcr, recognizeFile } from "./ocr/client.ts";
+import { recognizeFile, recognizeImage, setOcrHooks } from "./ocr/client.ts";
+import { isPdf, readPdf } from "./pdf/client.ts";
 import { ABBR, fmt, initialLang, saveLang, strings, type Lang } from "./i18n.ts";
 import { drawCard } from "./share.ts";
 
@@ -26,6 +35,8 @@ interface Img {
   pct: number;
   result?: ParseResult;
   age?: number;
+  isPdf: boolean;
+  pdf?: { page: number; pages: number; ocrPct?: number };
 }
 
 function emptyField(id: MarkerId): Field {
@@ -159,54 +170,84 @@ function fillFrom(id: MarkerId, found: Finding) {
 }
 
 async function addFiles(files: FileList | File[]) {
-  const list = [...files].filter((f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|heic|bmp)$/i.test(f.name));
+  const list = [...files].filter(
+    (f) => isPdf(f) || f.type.startsWith("image/") || /\.(png|jpe?g|webp|heic|bmp)$/i.test(f.name),
+  );
   if (!list.length) return;
   for (const file of list) {
-    state.images.push({ id: nextImg++, file, url: URL.createObjectURL(file), status: "waiting", pct: 0 });
+    const pdf = isPdf(file);
+    state.images.push({ id: nextImg++, file, url: pdf ? "" : URL.createObjectURL(file), status: "waiting", pct: 0, isPdf: pdf });
   }
   renderUpload();
   await processQueue();
 }
 
+/** All nine markers found in finished files plus `extra`: no need to OCR more scanned pages. */
+function allFound(extra: OcrText[]): boolean {
+  const done = state.images.filter((i) => i.status === "done" && i.result).map((i) => i.result!);
+  const c = combine([...done, parseReport(extra)]);
+  return MARKER_IDS.every((id) => c.values[id]);
+}
+
 async function processQueue() {
   if (busy) return;
   busy = true;
+  state.downloadFailed = false;
+  // The OCR model is only downloaded when an image or a scanned page needs it.
+  setOcrHooks({
+    onDownload: (loaded, total) => {
+      state.download = loaded < total ? { loaded, total } : null;
+      renderUpload();
+    },
+  });
   try {
-    state.downloadFailed = false;
-    await initOcr({
-      onDownload: (loaded, total) => {
-        state.download = loaded < total ? { loaded, total } : null;
-        renderUpload();
-      },
-    });
-    state.download = null;
     for (;;) {
       const img = state.images.find((i) => i.status === "waiting");
       if (!img) break;
       img.status = "reading";
       renderUpload();
       try {
-        const boxes = await recognizeFile(img.file, (done, total) => {
-          img.pct = Math.round((done / total) * 100);
-          renderUpload();
-        });
+        let boxes: OcrText[];
+        if (img.isPdf) {
+          const res = await readPdf(img.file, {
+            onProgress: (p) => {
+              img.pdf = p;
+              renderUpload();
+            },
+            ocr: (page, onPct) =>
+              recognizeImage(page, (d, t) => onPct(Math.round((d / t) * 100)), { maxLineWidth: 0.55, detWidth: 896 }),
+            done: allFound,
+          });
+          boxes = res.boxes;
+          img.pdf = { page: res.pages, pages: res.pages };
+        } else {
+          boxes = await recognizeFile(img.file, (done, total) => {
+            img.pct = Math.round((done / total) * 100);
+            renderUpload();
+          });
+        }
         const index = state.images.indexOf(img);
         img.result = parseReport(boxes, index);
         img.age = findAge(boxes);
         img.status = "done";
       } catch (err) {
         console.error(err);
+        if ((err as { download?: boolean }).download) {
+          // model download failed: keep the file waiting so "retry" picks it up
+          img.status = "waiting";
+          img.pdf = undefined;
+          state.download = null;
+          state.downloadFailed = true;
+          renderUpload();
+          break;
+        }
         img.status = "failed";
       }
+      state.download = null;
       applyFindings();
       renderUpload();
       renderForm();
     }
-  } catch (err) {
-    console.error(err);
-    state.download = null;
-    state.downloadFailed = true;
-    renderUpload();
   } finally {
     busy = false;
   }
@@ -337,7 +378,7 @@ function renderUpload() {
   const input = h("input", {
     type: "file",
     id: "file",
-    accept: "image/*",
+    accept: "image/*,application/pdf,.pdf",
     multiple: true,
     class: "visually-hidden",
     onchange: (e: Event) => {
@@ -396,21 +437,27 @@ function renderUpload() {
         { class: "thumbs" },
         state.images.map((img, k) => {
           const n = img.result?.findings.length ?? 0;
+          const p = img.pdf;
+          const reading = p
+            ? p.ocrPct !== undefined
+              ? fmt(s.pdfOcr, { page: p.page, pages: p.pages, pct: p.ocrPct })
+              : fmt(s.pdfReading, { page: p.page, pages: p.pages })
+            : fmt(s.recognizing, { pct: img.pct });
+          const found = (n ? fmt(s.foundN, { n }) : s.foundNone) + (p ? ` · ${fmt(s.pdfPages, { pages: p.pages })}` : "");
           const status =
             img.status === "waiting"
               ? s.waiting
               : img.status === "reading"
-                ? fmt(s.recognizing, { pct: img.pct })
+                ? reading
                 : img.status === "failed"
                   ? s.failed
-                  : n
-                    ? fmt(s.foundN, { n })
-                    : s.foundNone;
+                  : found;
+          const label = fmt(img.isPdf ? s.fromPdf : s.fromImage, { i: k + 1 });
           return h(
             "li",
             { class: `thumb ${img.status} ${img.status === "done" && !n ? "none" : ""}` },
-            h("img", { src: img.url, alt: fmt(s.fromImage, { i: k + 1 }) }),
-            h("div", { class: "thumb-meta" }, h("strong", {}, fmt(s.fromImage, { i: k + 1 })), h("span", {}, status)),
+            img.isPdf ? h("div", { class: "pdf-icon", "aria-hidden": "true" }, "PDF") : h("img", { src: img.url, alt: label }),
+            h("div", { class: "thumb-meta" }, h("strong", {}, label), h("span", {}, status)),
             img.status !== "reading" &&
               h(
                 "button",
@@ -518,7 +565,7 @@ function rowStatus(id: MarkerId): Child[] {
   if (fromOcr && f.ocr!.finding.image !== undefined) {
     const fd = f.ocr!.finding;
     out.push(
-      h("span", { class: "chip" }, fmt(s.fromImage, { i: fd.image! + 1 })),
+      h("span", { class: "chip" }, fmt(state.images[fd.image!]?.isPdf ? s.fromPdf : s.fromImage, { i: fd.image! + 1 })),
       h(
         "span",
         { class: "raw" },

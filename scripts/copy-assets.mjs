@@ -1,6 +1,6 @@
 // Copy the OCR models and the ONNX Runtime WebAssembly file into public/ocr,
 // so the site serves everything itself (no third-party CDN).
-import { copyFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const models = "node_modules/@gutenye/ocr-models/assets";
@@ -22,3 +22,13 @@ for (const [key, [src, name]] of Object.entries(files)) {
 }
 writeFileSync(join(out, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 console.log("OCR assets copied to", out);
+
+// pdf.js: worker, character maps for Chinese fonts, standard fonts and image decoders
+const pdfjs = "node_modules/pdfjs-dist";
+const pdfOut = "public/pdfjs";
+mkdirSync(pdfOut, { recursive: true });
+copyFileSync(join(pdfjs, "legacy/build/pdf.worker.min.mjs"), join(pdfOut, "pdf.worker.min.mjs"));
+for (const dir of ["cmaps", "standard_fonts", "wasm"]) {
+  cpSync(join(pdfjs, dir), join(pdfOut, dir), { recursive: true });
+}
+console.log("pdf.js assets copied to", pdfOut);

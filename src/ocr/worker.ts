@@ -1,10 +1,10 @@
 // Runs OCR off the main thread so the page stays responsive.
 import * as ort from "onnxruntime-web/wasm";
-import { ocr, parseKeys, type OcrModels, type RunModel } from "./pipeline.ts";
+import { ocr, parseKeys, type OcrModels, type OcrOptions, type RunModel } from "./pipeline.ts";
 
 export type WorkerRequest =
   | { type: "init"; base: string }
-  | { type: "ocr"; id: number; width: number; height: number; buffer: ArrayBuffer };
+  | { type: "ocr"; id: number; width: number; height: number; buffer: ArrayBuffer; opts?: OcrOptions };
 
 export type WorkerResponse =
   | { type: "download"; loaded: number; total: number }
@@ -88,7 +88,12 @@ ctx.onmessage = async (e) => {
       if (!models) throw new Error("OCR is not initialized");
       const m = await models;
       const img = { width: msg.width, height: msg.height, data: new Uint8ClampedArray(msg.buffer) };
-      const boxes = await ocr(img, m, (done, total) => ctx.postMessage({ type: "progress", id: msg.id, done, total }));
+      const boxes = await ocr(
+        img,
+        m,
+        (done, total) => ctx.postMessage({ type: "progress", id: msg.id, done, total }),
+        msg.opts,
+      );
       ctx.postMessage({ type: "result", id: msg.id, boxes });
     }
   } catch (err) {
