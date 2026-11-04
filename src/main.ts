@@ -32,8 +32,6 @@ function emptyField(id: MarkerId): Field {
   return { value: "", unit: MARKERS[id].units[0].id, alternatives: [], edited: false };
 }
 
-const SITE_URL = "https://github.com/wendywangba/phenoage";
-
 const state = {
   lang: initialLang() as Lang,
   images: [] as Img[],
@@ -314,7 +312,6 @@ function render() {
       {},
       h("p", {}, s.footerFormula),
       h("p", {}, s.footerLocal),
-      h("p", {}, h("a", { href: SITE_URL, target: "_blank", rel: "noopener" }, s.footerSource)),
     ),
   );
   renderUpload();

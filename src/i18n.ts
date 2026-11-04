@@ -74,7 +74,6 @@ const zh = {
 
   footerFormula: "公式：Levine 等 (2018) Aging；Liu 等 (2018) PLoS Medicine。",
   footerLocal: "识别和计算都在你的浏览器里完成。仅供兴趣参考，不构成医疗建议。",
-  footerSource: "源代码",
 
   markers: {
     albumin: "白蛋白",
@@ -177,7 +176,6 @@ const en: Strings = {
 
   footerFormula: "Formula: Levine et al. (2018) Aging; Liu et al. (2018) PLoS Medicine.",
   footerLocal: "Everything runs in your browser. For curiosity only, not medical advice.",
-  footerSource: "Source code",
 
   markers: {
     albumin: "Albumin",

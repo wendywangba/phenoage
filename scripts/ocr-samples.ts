@@ -1,5 +1,5 @@
 // Run OCR + parsing on a folder of report screenshots, in Node.
-// Usage: npm run ocr:samples -- <folder> [--json out.json]
+// Usage: npm run ocr:samples -- <folder> [--json out.json] [--models dir]
 // Sample reports contain personal health data: keep them outside the repo.
 
 import { readdir, readFile, writeFile, stat } from "node:fs/promises";
@@ -8,7 +8,9 @@ import * as ort from "onnxruntime-node";
 import sharp from "sharp";
 import { ocr, parseKeys, type OcrModels, type RunModel } from "../src/ocr/pipeline.ts";
 
-const MODELS = "node_modules/@gutenye/ocr-models/assets";
+const argv = process.argv.slice(2);
+// Defaults to the files the site serves (run `npm run assets` first).
+const MODELS = argv.includes("--models") ? argv[argv.indexOf("--models") + 1] : "public/ocr";
 
 async function loadModels(): Promise<OcrModels> {
   const mk = async (file: string): Promise<RunModel> => {
@@ -20,9 +22,9 @@ async function loadModels(): Promise<OcrModels> {
     };
   };
   return {
-    det: await mk("ch_PP-OCRv4_det_infer.onnx"),
-    rec: await mk("ch_PP-OCRv4_rec_infer.onnx"),
-    keys: parseKeys(await readFile(join(MODELS, "ppocr_keys_v1.txt"), "utf8")),
+    det: await mk("det.onnx"),
+    rec: await mk("rec.onnx"),
+    keys: parseKeys(await readFile(join(MODELS, "keys.txt"), "utf8")),
   };
 }
 
@@ -37,11 +39,10 @@ async function listImages(dir: string): Promise<string[]> {
   return out;
 }
 
-const args = process.argv.slice(2);
-const dir = args[0];
-const jsonOut = args.includes("--json") ? args[args.indexOf("--json") + 1] : undefined;
+const dir = argv[0];
+const jsonOut = argv.includes("--json") ? argv[argv.indexOf("--json") + 1] : undefined;
 if (!dir) {
-  console.error("usage: npm run ocr:samples -- <folder> [--json out.json]");
+  console.error("usage: npm run ocr:samples -- <folder> [--json out.json] [--models dir]");
   process.exit(1);
 }
 
